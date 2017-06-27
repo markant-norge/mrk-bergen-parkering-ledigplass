@@ -1,3 +1,8 @@
 # Bergen Parkering - Ledig plass
 
-Shortcodes [bergenpledig get="KlosterGarasjen|ByGarasjen|Sist oppdatert"]
+Created use of shortcode bergenpledig
+
+#### Usage
+```
+[bergenpledig get="KlosterGarasjen|ByGarasjen|Sist oppdatert"]
+```
