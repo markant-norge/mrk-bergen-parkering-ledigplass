@@ -2,114 +2,97 @@
 /*
 Plugin Name: Markant - Bergen pakering - ledige plasser
 Plugin URI: http://vc.wpbakery.com
-Description: [bergenpledig get="KlosterGarasjen|ByGarasjen|Sist oppdatert"]
-Version: 0.0.1
+Description: [bergenpledig get="KlosterGarasjen|ByGarasjen|Nordnes|ByGarasjenLadepunkter|KlosterGarasjenLadepunkter|NordnesLadepunkter|ByGarasjenPris|KlosterGarasjenPris|NordnesPris|Sist oppdatert"]
+Version: 0.0.2
 Author: Markant
 Author URI: http://markant.no
 */
 
-/**
- * Copyright (C) Markant Norge AS - All Rights Reserved
- * Unauthorized copying of this file, via any medium is strictly prohibited
- * Proprietary and confidential
- *
- * @author petterk
- * @date 1/17/17 12:47 PM
- */
-
-define("PARKERING_FTP_SERVER", "admftpssl2.bergen.kommune.no");
-define("PARKERING_FTP_USERNAME", "bkparkering");
-define("PARKERING_FTP_PASSWORD", "divan-97MpK");
-define("PARKERING_FTP_FILE", "Parkering.txt");
-
-
-/*
- * Get file on FTP server as a string
- */
-function ftp_get_string($ftp, $filename) {
-    $temp = fopen('php://temp', 'r+');
-    if (@ftp_fget($ftp, $temp, $filename, FTP_BINARY, 0)) {
-        rewind($temp);
-        return stream_get_contents($temp);
-    }
-    else {
-        return false;
-    } 
+function upload_dir() {
+    $upload_dir   = wp_upload_dir();
+    return isset($upload_dir['basedir'])?$upload_dir['basedir']:".";
 }
 
-/*
- * Download FTP file
- */
-function getFileContentFormFTP() {
-    $ftp = ftp_ssl_connect(PARKERING_FTP_SERVER);
-    $login_result = @ftp_login($ftp, PARKERING_FTP_USERNAME, PARKERING_FTP_PASSWORD);
-    if (!$login_result) {
-        return false;
-    }
-    ftp_pasv($ftp, true);
-    $str = ftp_get_string($ftp, PARKERING_FTP_FILE);
-    ftp_close($ftp);
+function DownloadNewInfo() {
+    $headr = array();
+    $headr[] = 'Content-length: 0';
+    $headr[] = 'Content-type: application/json';
+    $headr[] = 'Authorization: basic ' . base64_encode("test:test");
+
+     $options = array(
+        CURLOPT_RETURNTRANSFER => true,   // return web page
+        CURLOPT_HEADER         => false,  // don't return headers
+        CURLOPT_FOLLOWLOCATION => true,   // follow redirects
+        CURLOPT_MAXREDIRS      => 10,     // stop after 10 redirects
+        CURLOPT_ENCODING       => "",     // handle compressed
+        CURLOPT_USERAGENT      => "test", // name of client
+        CURLOPT_AUTOREFERER    => true,   // set referrer on redirect
+        CURLOPT_CONNECTTIMEOUT => 120,    // time-out on connect
+        CURLOPT_TIMEOUT        => 120,    // time-out on response
+        CURLOPT_HTTPHEADER     => $headr
+    ); 
+
+    $ch = curl_init("http://api.ledig-parkering.no/freespaces");
+    curl_setopt_array($ch, $options);
+    $content = curl_exec($ch);
+
+    curl_close($ch);
+
+    $tempFile = upload_dir() . '/ledigeplasser.ser';
     
-    return $str;
+    file_put_contents($tempFile, serialize(json_decode($content, true)));
 }
 
-/*
- * Process downloaded CSV file
- */
-function processParkeringFile($str) {
-    $lines = explode("\n", $str);
-    $klostergarasjen = false;
-    $bygarasjen = false;
-    $sistOppdatert = 0;
-    foreach ($lines as $line) {
-        if (!empty($line)) {
-            $q = explode(";", $line);
 
-            if (is_array($q) && sizeOf($q)>2) {
-                if ($q[0]=="01") {
-                    $bygarasjen = array(
-                        "plasser" => intval($q[1]),
-                        "oppdatert" => @strtotime($q[4])
-                    );
-                } else if ($q[0]=="02") {
-                    $klostergarasjen = array(
-                        "plasser" => intval($q[1]),
-                        "oppdatert" => @strtotime($q[4])
-                    );
-                }   
-            }
+function GetFileData($cache = 0) {
+    if (!isset($GLOBALS['bergeparkering-cache'])) {
+        $tempFile = upload_dir() . '/ledigeplasser.ser';
+
+        if ($cache > 0 && file_exists($tempFile) && filemtime($tempFile)+$cache > time()) {
+            $GLOBALS['bergeparkering-cache'] = unserialize(file_get_contents($tempFile));
+        } else {
+            DownloadNewInfo();
+            $GLOBALS['bergeparkering-cache'] = unserialize(file_get_contents($tempFile));
         }
     }
-
-    return array($bygarasjen['plasser'], $klostergarasjen['plasser'], date("d.m.Y H:i", $klostergarasjen['oppdatert']));
+    
+    return $GLOBALS['bergeparkering-cache'];
 }
 
 function bergenpledig_shortcode( $atts ){
     $a = shortcode_atts( array(
+        
         /* Can be: KlosterGarasjen  or  ByGarasjen  or "Sist oppdatert" */
         'get' => 'KlosterGarasjen',
+        
         /* Amount of seconds to cache http://bergenparkering.com/ledigeplasser-svg.php in file. Set to 0 to disable. */
         'cache' => 300
     ), $atts );
 
-    $get = $a['get'];
-    $cache = (int)$a['cache'];
-
-    $upload = wp_upload_dir();
-    $tempFile = $upload['path'] . '/ledigeplasser.csv';
-
-    if ($cache > 0 && file_exists($tempFile) && filemtime($tempFile)+$cache > time()) {
-        list($bygarasjen, $klostergarasjen, $sistOppdatert) = explode(";", file_get_contents($tempFile));
-    } else {
-        list($bygarasjen, $klostergarasjen, $sistOppdatert) = @processParkeringFile(getFileContentFormFTP());
-       @file_put_contents($tempFile, implode(";", array($bygarasjen, $klostergarasjen, $sistOppdatert)));
-    }
-    
-    switch ($get) {
-        case 'KlosterGarasjen':
-            return $klostergarasjen;
+    $data = GetFileData((int) $a['cache']);
+    switch (!empty($a['get'])?$a['get']:"") {
+        
         case 'ByGarasjen':
-            return $bygarasjen;
+            return $data['data']['bygarasjen']['NumFreeSpaces'];
+        case 'KlosterGarasjen':
+            return $data['data']['klostergarasjen']['NumFreeSpaces'];
+        case 'Nordnes':
+            return $data['data']['nordnes']['NumFreeSpaces'];
+            
+        case 'ByGarasjenLadepunkter':
+            return $data['data']['bygarasjen']['NumAvailableChargepoints'];
+        case 'KlosterGarasjenLadepunkter':
+            return $data['data']['klostergarasjen']['NumAvailableChargepoints'];
+        case 'NordnesLadepunkter':
+            return $data['data']['nordnes']['NumAvailableChargepoints'];
+            
+        case 'ByGarasjenPris':
+            return $data['data']['bygarasjen']['CurrentPrice'];
+        case 'KlosterGarasjenPris':
+            return $data['data']['klostergarasjen']['CurrentPrice'];
+        case 'NordnesPris':
+            return $data['data']['nordnes']['CurrentPrice'];
+            
         case 'Sist oppdatert':
             return $sistOppdatert;
         default: return "";
@@ -117,4 +100,5 @@ function bergenpledig_shortcode( $atts ){
     
     return '';
 }
+
 add_shortcode( 'bergenpledig', 'bergenpledig_shortcode' );
