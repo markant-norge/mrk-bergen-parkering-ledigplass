@@ -1,16 +1,19 @@
 # Bergen Parkering - Ledig plass
 
-Created use of shortcode bergenpledig
+Provides available parking and charger spaces
 
 #### Usage
 ```
 [bergenpledig get="VARIABLE"]
 ```
-#### VARIABLE:
 Only use one variable in each shortcode
-##### Get Free spaces:
-ByGarasjen | KlosterGarasjen
-##### Get Free charging spots:
-ByGarasjenLadepunkter | KlosterGarasjenLadepunkter | NordnesLadepunkter
-##### Get Price:
-ByGarasjenPris | KlosterGarasjenPris
+
+
+##### Variables for Free spaces:
+ByGarasjen | KlosterGarasjen | NordnesGarasjen | GriegGarasjen
+
+##### Variables for Free charging spots:
+ByGarasjenLadepunkter | KlosterGarasjenLadepunkter | NordnesLadepunkter | GriegGarasjenLadepunkter
+
+##### Variables for Price:
+ByGarasjenPris | KlosterGarasjenPris | NordnesGarasjenPris | GriegGarasjenPris
